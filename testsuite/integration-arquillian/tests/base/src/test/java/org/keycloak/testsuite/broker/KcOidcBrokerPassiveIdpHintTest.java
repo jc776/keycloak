@@ -17,36 +17,28 @@
 
 package org.keycloak.testsuite.broker;
 
+import java.util.Collections;
 import java.util.List;
 
 import javax.ws.rs.core.Response;
-import javax.ws.rs.core.UriBuilder;
 
 import org.junit.Before;
 import org.junit.Test;
-
+import org.keycloak.OAuthErrorException;
 import org.keycloak.admin.client.resource.RealmResource;
-import org.keycloak.common.util.*;
-import org.keycloak.connections.infinispan.InfinispanConnectionProvider;
-import org.keycloak.keys.KeyProvider;
-import org.keycloak.keys.PublicKeyStorageUtils;
-import org.keycloak.protocol.oidc.OIDCLoginProtocolService;
 import org.keycloak.representations.idm.ClientRepresentation;
-import org.keycloak.representations.idm.ComponentRepresentation;
-import org.keycloak.representations.idm.IdentityProviderRepresentation;
-import org.keycloak.representations.idm.KeysMetadataRepresentation;
 import org.keycloak.representations.idm.UserRepresentation;
 import org.keycloak.testsuite.Assert;
-import org.keycloak.testsuite.admin.ApiUtil;
-import org.keycloak.testsuite.arquillian.SuiteContext;
-import org.keycloak.testsuite.client.resources.TestingCacheResource;
+import org.keycloak.testsuite.util.ClientManager;
 import org.keycloak.testsuite.util.OAuthClient;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotEquals;
 import static org.keycloak.testsuite.admin.ApiUtil.createUserWithAdminClient;
 import static org.keycloak.testsuite.admin.ApiUtil.resetUserPassword;
 import static org.keycloak.testsuite.broker.BrokerTestTools.waitForPage;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 /**
  * @author JCoady
@@ -55,7 +47,6 @@ public class KcOidcBrokerPassiveIdpHintTest extends AbstractBaseBrokerTest {
 
     @Override
     protected BrokerConfiguration getBrokerConfiguration() {
-    	// - createConsumerClients(SuiteContext suiteContext) to OIDC into it
         return KcOidcBrokerConfiguration.INSTANCE;
     }
 
@@ -110,21 +101,90 @@ public class KcOidcBrokerPassiveIdpHintTest extends AbstractBaseBrokerTest {
         }
     }
     
+//    @Test
+//    public void testPassiveIdpHintSuccess() throws Exception {
+//    	// log in for the first time to set up provider
+//    	logInAsUserInIDPForFirstTime();
+//        assertLoggedInAccountManagement();
+//        logoutFromRealm(bc.consumerRealmName());
+//    	
+//        // log in to provider without going through consumer
+//        logInAsUserToProvider();
+//        assertLoggedInAccountManagement();
+//    	
+//        // - account
+//        // - some client secret (do I care?)
+//        // - /auth/realms/master/account/*
+//        // - /auth/realms/master/account
+//        ClientManager.realm(adminClient.realm("master")).clientId("account").addRedirectUris("https://www.google.com/");
+//        oauth.realm(bc.consumerRealmName());
+//        oauth.clientId("account");
+//        oauth.redirectUri("https://www.google.com/");
+//        final String pp = oauth.getLoginFormUrl() + "&prompt=none" + "&kc_idp_hint=" + BrokerTestConstants.IDP_OIDC_ALIAS;
+//        // http://localhost:8180/auth/realms/test/protocol/openid-connect/auth?response_type=code&client_id=account&redirect_uri=https%3A%2F%2Fwww.google.com%2F&state=d912a949-9a8e-44ce-9925-271f384f9e31&scope=openid&prompt=none&kc_idp_hint=kc-oidc-idp
+//        log.debug(pp);
+//        driver.navigate().to(pp);
+//        
+//        // http://localhost:8180/auth/realms/test/protocol/openid-connect/auth?response_type=code&client_id=account&redirect_uri=https%3A%2F%2Fwww.google.com%2F&state=d912a949-9a8e-44ce-9925-271f384f9e31&scope=openid&prompt=none&kc_idp_hint=kc-oidc-idp
+//        // expected 'google' - maybe the redirect URI didn't work. Could add a custom client.
+//        log.debug(driver.getCurrentUrl());
+//
+//        // current behaviour: "Login required", since you're not in on consumer.
+//        // wanted behaviour: log in to consumer immediately
+//        OAuthClient.AuthorizationEndpointResponse resp = new OAuthClient.AuthorizationEndpointResponse(oauth);
+//        Assert.assertNull(resp.getCode());
+//        Assert.assertEquals(OAuthErrorException.LOGIN_REQUIRED, resp.getError());
+//        
+//        // http://localhost:8180/auth/realms/test/protocol/openid-connect/auth?response_type=code&client_id=account
+//        // &redirect_uri=http%3A%2F%2Flocalhost%3A8180%2Fauth%2Frealms%2Fconsumer%2Faccount&state=ef092183-39c8-4392-8db0-eab2c3ddf804&scope=openid&prompt=none&kc_idp_hint=kc-oidc-idp
+//
+//        
+//        Assert.fail(pp);
+//    }
+    
     @Test
-    public void testPassiveIdpHintSuccess() throws Exception {
+    public void testIdpHintOnly() throws Exception {
     	// log in for the first time to set up provider
     	logInAsUserInIDPForFirstTime();
         assertLoggedInAccountManagement();
         logoutFromRealm(bc.consumerRealmName());
+        
     	
         // log in to provider without going through consumer
+        log.debug("Log in to provider - ");
         logInAsUserToProvider();
         assertLoggedInAccountManagement();
     	
-    	// prompt=none&idp_hint=[provider] should log you in to consumer immediately
-    	// [provider] = getIDPAlias()
-        Assert.fail("test prompt=none");
+        log.debug("Now go to consumer - ");
+        driver.navigate().to(getAccountUrl(bc.consumerRealmName()) + "?kc_idp_hint=" + BrokerTestConstants.IDP_OIDC_ALIAS);
+        // fails.
+        assertLoggedInAccountManagement();
     }
+    
+//    @Test
+//    public void testPassiveIdpHintB() throws Exception {
+//    	// log in for the first time to set up provider
+//    	logInAsUserInIDPForFirstTime();
+//        assertLoggedInAccountManagement();
+//        
+//        // just try prompt=none
+//        oauth.clientId("account");
+//        oauth.redirectUri(getAccountUrl(bc.consumerRealmName()));
+//        final String pp = oauth.getLoginFormUrl() + "&prompt=none" + "&kc_idp_hint=" + BrokerTestConstants.IDP_OIDC_ALIAS;
+//        
+//        log.debug(pp);
+//        driver.navigate().to(pp);
+//        
+//        // http://localhost:8180/auth/realms/test/protocol/openid-connect/auth?response_type=code&client_id=account&redirect_uri=https%3A%2F%2Fwww.google.com%2F&state=d912a949-9a8e-44ce-9925-271f384f9e31&scope=openid&prompt=none&kc_idp_hint=kc-oidc-idp
+//        // expected 'google' - maybe the redirect URI didn't work. Could add a custom client.
+//        log.debug(driver.getCurrentUrl());
+//
+//        // current behaviour: "Login required", since you're not in on consumer.
+//        // wanted behaviour: log in to consumer immediately
+//        OAuthClient.AuthorizationEndpointResponse resp = new OAuthClient.AuthorizationEndpointResponse(oauth);
+//        Assert.assertNull(resp.getCode());
+//        Assert.assertEquals(OAuthErrorException.LOGIN_REQUIRED, resp.getError());
+//    }
     
     protected void logInAsUserToProvider() {
         driver.navigate().to(getAccountUrl(bc.providerRealmName()));
@@ -154,5 +214,4 @@ public class KcOidcBrokerPassiveIdpHintTest extends AbstractBaseBrokerTest {
 //    private RealmResource consumerRealm() {
 //        return adminClient.realm(bc.consumerRealmName());
 //    }
-
 }
